@@ -1,0 +1,5 @@
+pandas
+openpyxl
+xlrd
+tkinterdnd2
+PyQt5
