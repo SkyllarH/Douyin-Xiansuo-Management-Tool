@@ -10,7 +10,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QFont
 from qfluentwidgets import (
     PrimaryPushButton, PushButton, LineEdit, BodyLabel, TitleLabel,
-    CheckBox, TableWidget, CardWidget, setTheme, Theme
+    CheckBox, TableWidget, CardWidget, setTheme, Theme, FlowLayout
 )
 
 """
@@ -34,8 +34,8 @@ class ExcelTool(QMainWindow):
         super().__init__()
         # 设置窗口标题和大小
         self.setWindowTitle("抖音线索整理工具 - By MirrorLab")
-        self.resize(800, 1000)
-        self.setMinimumSize(800, 1000)
+        self.resize(700, 1200)
+        self.setMinimumSize(700, 1200)
 
         # 设置窗口图标
         logo_path = os.path.join(os.path.dirname(__file__), 'logo.svg')
@@ -44,7 +44,21 @@ class ExcelTool(QMainWindow):
 
         # 存储选中的文件
         self.selected_files = []
-        
+
+        # 所有可用的列及其默认选中状态
+        self.column_checkboxes = {
+            "月份": True,          # 原"本月月份"
+            "下发日期": True,
+            "更新时间": True,
+            "主播": True,
+            "跟进顾问": True,
+            "客户姓名": True,
+            "抖音ID": True,        # 原"抖音id"
+            "客户手机号": True,     # 原"手机号"
+            "微信号": True,
+            "客户所在地": False     # 默认不选
+        }
+
         # 尝试使用桌面作为默认目录，如果失败则使用当前目录
         try:
             desktop_dir = os.path.join(os.path.expanduser('~'), 'Desktop')
@@ -227,6 +241,30 @@ class ExcelTool(QMainWindow):
         options_layout.addStretch()
         settings_card_layout.addLayout(options_layout)
 
+        # 列选择区域
+        column_label = BodyLabel("选择输出列:")
+        column_label.setFont(QFont("Caribi, Microsoft YaHei", 10))
+        column_label.setStyleSheet("color: #000000;")
+        settings_card_layout.addWidget(column_label)
+
+        # 创建列选择复选框的容器
+        self.column_checkbox_widgets = {}
+        columns_flow_layout = FlowLayout()
+        columns_flow_layout.setSpacing(8)
+
+        for col_name in self.column_checkboxes.keys():
+            checkbox = CheckBox(col_name)
+            checkbox.setChecked(self.column_checkboxes[col_name])
+            checkbox.setFont(QFont("Caribi, Microsoft YaHei", 9))
+            checkbox.setStyleSheet("color: #000000;")
+            checkbox.stateChanged.connect(
+                lambda state, name=col_name: self.on_column_checkbox_changed(name, state)
+            )
+            self.column_checkbox_widgets[col_name] = checkbox
+            columns_flow_layout.addWidget(checkbox)
+
+        settings_card_layout.addLayout(columns_flow_layout)
+
         main_layout.addWidget(settings_card)
 
         status_card = CardWidget()
@@ -288,6 +326,18 @@ class ExcelTool(QMainWindow):
             import traceback
             self.status_text.append(traceback.format_exc())
 
+    def on_column_checkbox_changed(self, column_name, state):
+        """处理列选择复选框变化"""
+        self.column_checkboxes[column_name] = bool(state)
+
+    def get_selected_columns(self):
+        """获取用户选择的列列表"""
+        selected_columns = [col for col, is_selected in self.column_checkboxes.items() if is_selected]
+        # 如果选择了客户所在地，则自动添加是否本地线索列
+        if "客户所在地" in selected_columns and "是否本地线索" not in selected_columns:
+            selected_columns.insert(selected_columns.index("客户所在地") + 1, "是否本地线索")
+        return selected_columns
+
     def clear_files(self):
         """清空文件列表"""
         self.selected_files.clear()
@@ -315,8 +365,8 @@ class ExcelTool(QMainWindow):
 
     def _process_single_file(self, df):
         """处理单个文件，提取所需列"""
-        # 本月月份
-        df["本月月份"] = datetime.now().strftime("%m月")
+        # 月份
+        df["月份"] = datetime.now().strftime("%m月")
         
         # 更新时间
         df["更新时间"] = datetime.now().strftime("%H:%M")
@@ -356,27 +406,28 @@ class ExcelTool(QMainWindow):
         else:
             df["客户姓名"] = ""
         
-        # 抖音id
+        # 抖音ID
         id_col = None
-        id_keywords = ["抖音id"]
+        id_keywords = ["抖音id", "抖音ID", "抖音账号", "客户抖音号"]
         for col in df.columns:
+            col_lower = col.lower()
             for keyword in id_keywords:
-                if keyword in col:
+                if keyword.lower() in col_lower:
                     id_col = col
                     break
             if id_col:
                 break
         if id_col:
-            df["抖音id"] = df[id_col].apply(lambda x: str(x).strip() if pd.notna(x) else "")
+            df["抖音ID"] = df[id_col].apply(lambda x: str(x).strip() if pd.notna(x) else "")
         else:
-            df["抖音id"] = ""
+            df["抖音ID"] = ""
         
-        # 手机号
+        # 客户手机号
         phone_col = None
-        phone_keywords = ["电话", "手机号", "客户手机号"]
+        phone_keywords = ["电话", "手机号", "客户手机号", "手机", "联系电话"]
         for col in df.columns:
             col_lower = col.lower()
-            if col_lower == "手机号":
+            if "手机号" in col_lower or "phone" in col_lower:
                 phone_col = col
                 break
             for keyword in phone_keywords:
@@ -386,16 +437,16 @@ class ExcelTool(QMainWindow):
             if phone_col:
                 break
         if phone_col:
-            df["手机号"] = df[phone_col].apply(self.clean_phone)
+            df["客户手机号"] = df[phone_col].apply(self.clean_phone)
         else:
-            df["手机号"] = ""
+            df["客户手机号"] = ""
         
         # 微信号
         wechat_col = None
-        wechat_keywords = ["微信号", "微信", "客户微信号"]
+        wechat_keywords = ["微信号", "微信", "wechat"]
         for col in df.columns:
             col_lower = col.lower()
-            if col_lower == "微信号":
+            if "微信号" in col_lower or "wechat" in col_lower:
                 wechat_col = col
                 break
             for keyword in wechat_keywords:
@@ -412,15 +463,15 @@ class ExcelTool(QMainWindow):
         return df
     
     def _deduplicate_single_file(self, df, filename):
-        """单文件去重，基于手机号和微信号"""
+        """单文件去重，基于客户手机号和微信号"""
         original_len = len(df)
-        # 基于手机号和微信号去重，保留第一条记录
-        df = df.drop_duplicates(subset=["手机号", "微信号"], keep="first")
+        # 基于客户手机号和微信号去重，保留第一条记录
+        df = df.drop_duplicates(subset=["客户手机号", "微信号"], keep="first")
         self.status_text.append(f"文件 {filename} 移除了 {original_len - len(df)} 条重复记录，保留{len(df)}条有效记录！")
         return df
     
     def _deduplicate_after_merge(self, merged_df):
-        """合并后去重，基于客户姓名，合并手机号和微信号"""
+        """合并后去重，基于客户姓名，合并客户手机号和微信号"""
         original_len = len(merged_df)
         
         def merge_records(group):
@@ -431,16 +482,16 @@ class ExcelTool(QMainWindow):
             # 初始化合并后的记录
             merged_record = group.iloc[0].copy()
             
-            # 遍历所有记录，合并手机号和微信号
+            # 遍历所有记录，合并客户手机号和微信号
             for i in range(1, len(group)):
                 current_record = group.iloc[i]
                 
-                # 合并手机号
-                if pd.notna(current_record['手机号']) and current_record['手机号'] != '':
-                    if pd.isna(merged_record['手机号']) or merged_record['手机号'] == '':
-                        merged_record['手机号'] = current_record['手机号']
-                    elif current_record['手机号'] != merged_record['手机号']:
-                        merged_record['手机号'] = str(merged_record['手机号']) + ',' + str(current_record['手机号'])
+                # 合并客户手机号
+                if pd.notna(current_record['客户手机号']) and current_record['客户手机号'] != '':
+                    if pd.isna(merged_record['客户手机号']) or merged_record['客户手机号'] == '':
+                        merged_record['客户手机号'] = current_record['客户手机号']
+                    elif current_record['客户手机号'] != merged_record['客户手机号']:
+                        merged_record['客户手机号'] = str(merged_record['客户手机号']) + ',' + str(current_record['客户手机号'])
                 
                 # 合并微信号
                 if pd.notna(current_record['微信号']) and current_record['微信号'] != '':
@@ -509,10 +560,7 @@ class ExcelTool(QMainWindow):
                     df = self._deduplicate_single_file(df, os.path.basename(file))
                 
                 # 按照要求的顺序排列列
-                required_columns = [
-                    "本月月份", "更新时间", "主播", "客户所在地", "是否本地线索",
-                    "跟进顾问", "下发日期", "客户姓名", "抖音id", "手机号", "微信号"
-                ]
+                required_columns = self.get_selected_columns()
                 df = df[required_columns]
 
                 # 保存处理后的文件
@@ -585,10 +633,7 @@ class ExcelTool(QMainWindow):
                     df = self._deduplicate_single_file(df, os.path.basename(file))
                 
                 # 按照要求的顺序排列列
-                required_columns = [
-                    "本月月份", "更新时间", "主播", "客户所在地", "是否本地线索",
-                    "跟进顾问", "下发日期", "客户姓名", "抖音id", "手机号", "微信号"
-                ]
+                required_columns = self.get_selected_columns()
                 df = df[required_columns]
                 
                 all_data.append(df)
