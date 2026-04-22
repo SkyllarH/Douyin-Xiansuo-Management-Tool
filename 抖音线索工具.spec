@@ -1,11 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 a = Analysis(
     ['qt_excel_tool.py'],
     pathex=[],
     binaries=[],
-    datas=[('logo.svg', '.')],
+    datas=[('favicon.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -22,8 +21,9 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='抖音线索工具',
+    name='抖音线索工具2.0',
     debug=False,
+    icon='favicon.ico',  # 图标正常用
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,

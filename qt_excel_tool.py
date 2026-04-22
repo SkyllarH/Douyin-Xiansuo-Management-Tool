@@ -33,12 +33,12 @@ class ExcelTool(QMainWindow):
         """初始化应用程序"""
         super().__init__()
         # 设置窗口标题和大小
-        self.setWindowTitle("抖音线索整理工具 - By MirrorLab")
+        self.setWindowTitle("抖音线索整理工具 v2.0 - By MirrorLab")
         self.resize(700, 1200)
         self.setMinimumSize(700, 1200)
 
         # 设置窗口图标
-        logo_path = os.path.join(os.path.dirname(__file__), 'logo.svg')
+        logo_path = os.path.join(os.path.dirname(__file__), 'favicon.ico')
         if os.path.exists(logo_path):
             self.setWindowIcon(QIcon(logo_path))
 
@@ -775,12 +775,13 @@ class ExcelTool(QMainWindow):
             msg_box.setIcon(QMessageBox.Question)
             msg_box.setText("是否删除刚才处理的源文件？")
             
+            
             # 添加按钮
             yes_btn = msg_box.addButton("是", QMessageBox.YesRole)
             no_btn = msg_box.addButton("否", QMessageBox.NoRole)
             cancel_btn = msg_box.addButton("取消", QMessageBox.RejectRole)
             
-            msg_box.setDefaultButton(no_btn)
+            msg_box.setDefaultButton(yes_btn)
             msg_box.exec_()
             
             if msg_box.clickedButton() == yes_btn:
