@@ -44,6 +44,9 @@ class ExcelTool(QMainWindow):
 
         # 存储选中的文件
         self.selected_files = []
+        
+        # 存储处理过的源文件路径
+        self.processed_files = []
 
         # 所有可用的列及其默认选中状态
         self.column_checkboxes = {
@@ -52,8 +55,9 @@ class ExcelTool(QMainWindow):
             "更新时间": True,
             "主播": True,
             "跟进顾问": True,
-            "客户姓名": True,
-            "抖音ID": True,        # 原"抖音id"
+            "客户姓名/抖音ID": True,  # 默认选中
+            "客户姓名": False,      # 默认不选
+            "抖音ID": False,        # 默认不选
             "客户手机号": True,     # 原"手机号"
             "微信号": True,
             "客户所在地": False     # 默认不选
@@ -502,8 +506,13 @@ class ExcelTool(QMainWindow):
             
             return merged_record
         
-        # 基于客户姓名分组
-        grouped = merged_df.groupby(['客户姓名'])
+        # 根据用户选择的列确定分组键
+        if "客户姓名/抖音ID" in self.get_selected_columns():
+            # 如果选择了客户姓名/抖音ID列，则基于该列分组
+            grouped = merged_df.groupby(['客户姓名/抖音ID'])
+        else:
+            # 否则基于客户姓名分组
+            grouped = merged_df.groupby(['客户姓名'])
         
         result_frames = []
         for name, group in grouped:
@@ -559,14 +568,31 @@ class ExcelTool(QMainWindow):
                 if self.remove_duplicates_checkbox.isChecked():
                     df = self._deduplicate_single_file(df, os.path.basename(file))
                 
-                # 按照要求的顺序排列列
-                required_columns = self.get_selected_columns()
-                df = df[required_columns]
-
+                # 生成客户姓名/抖音ID列（如果用户选择了该列）
+                if "客户姓名/抖音ID" in self.get_selected_columns():
+                    def get_customer_name(row):
+                        try:
+                            if "抖音ID" in row and row["抖音ID"] and row["抖音ID"] != "":
+                                return row["抖音ID"]
+                            elif "客户姓名" in row and row["客户姓名"] and row["客户姓名"] != "":
+                                return f"{row['客户姓名']}(抖音昵称)"
+                            else:
+                                return ""
+                        except Exception:
+                            return ""
+                    
+                    df["客户姓名/抖音ID"] = df.apply(get_customer_name, axis=1)
+                
                 # 保存处理后的文件
                 output_file = os.path.join(output_dir, f"整理线索_{timestamp}.xlsx")
-                df.to_excel(output_file, index=False)
+                # 按照要求的顺序排列列并保存
+                required_columns = self.get_selected_columns()
+                df[required_columns].to_excel(output_file, index=False)
                 self.status_text.append(f"已保存: {output_file}")
+                
+                # 将处理过的源文件路径添加到processed_files中
+                if file not in self.processed_files:
+                    self.processed_files.append(file)
 
             self.status_text.append("文件已处理完成！")
             
@@ -632,11 +658,26 @@ class ExcelTool(QMainWindow):
                 if self.remove_duplicates_checkbox.isChecked():
                     df = self._deduplicate_single_file(df, os.path.basename(file))
                 
-                # 按照要求的顺序排列列
-                required_columns = self.get_selected_columns()
-                df = df[required_columns]
+                # 生成客户姓名/抖音ID列（如果用户选择了该列）
+                if "客户姓名/抖音ID" in self.get_selected_columns():
+                    def get_customer_name(row):
+                        try:
+                            if "抖音ID" in row and row["抖音ID"] and row["抖音ID"] != "":
+                                return row["抖音ID"]
+                            elif "客户姓名" in row and row["客户姓名"] and row["客户姓名"] != "":
+                                return f"{row['客户姓名']}(抖音昵称)"
+                            else:
+                                return ""
+                        except Exception:
+                            return ""
+                    
+                    df["客户姓名/抖音ID"] = df.apply(get_customer_name, axis=1)
                 
                 all_data.append(df)
+                
+                # 将处理过的源文件路径添加到processed_files中
+                if file not in self.processed_files:
+                    self.processed_files.append(file)
 
             if all_data:
                 # 合并所有文件
@@ -650,11 +691,28 @@ class ExcelTool(QMainWindow):
                 if self.remove_empty_checkbox.isChecked():
                     merged_df = merged_df.dropna(how='all')
 
+                # 生成客户姓名/抖音ID列（如果用户选择了该列）
+                if "客户姓名/抖音ID" in self.get_selected_columns():
+                    def get_customer_name(row):
+                        try:
+                            if "抖音ID" in row and row["抖音ID"] and row["抖音ID"] != "":
+                                return row["抖音ID"]
+                            elif "客户姓名" in row and row["客户姓名"] and row["客户姓名"] != "":
+                                return f"{row['客户姓名']}(抖音昵称)"
+                            else:
+                                return ""
+                        except Exception:
+                            return ""
+                    
+                    merged_df["客户姓名/抖音ID"] = merged_df.apply(get_customer_name, axis=1)
+
                 # 生成时间戳
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
                 # 保存合并后的文件
                 output_file = os.path.join(output_dir, f"合并线索_{timestamp}.xlsx")
-                merged_df.to_excel(output_file, index=False)
+                # 按照要求的顺序排列列并保存
+                required_columns = self.get_selected_columns()
+                merged_df[required_columns].to_excel(output_file, index=False)
                 self.status_text.append(f"已保存: {output_file}")
                 self.status_text.append(f"合并完成！共 {len(merged_df)} 条记录")
                 
@@ -707,6 +765,47 @@ class ExcelTool(QMainWindow):
             return ""
         wechat_str = str(wechat).strip()
         return wechat_str if wechat_str else ""
+    
+    def closeEvent(self, event):
+        """窗口关闭事件"""
+        # 如果有处理过的源文件，询问是否删除
+        if self.processed_files:
+            msg_box = QMessageBox()
+            msg_box.setWindowTitle("退出确认")
+            msg_box.setIcon(QMessageBox.Question)
+            msg_box.setText("是否删除刚才处理的源文件？")
+            
+            # 添加按钮
+            yes_btn = msg_box.addButton("是", QMessageBox.YesRole)
+            no_btn = msg_box.addButton("否", QMessageBox.NoRole)
+            cancel_btn = msg_box.addButton("取消", QMessageBox.RejectRole)
+            
+            msg_box.setDefaultButton(no_btn)
+            msg_box.exec_()
+            
+            if msg_box.clickedButton() == yes_btn:
+                # 删除处理过的源文件
+                deleted_count = 0
+                for file in self.processed_files:
+                    try:
+                        if os.path.exists(file):
+                            os.remove(file)
+                            deleted_count += 1
+                    except Exception as e:
+                        print(f"删除文件失败: {file}, 错误: {str(e)}")
+                
+                if deleted_count > 0:
+                    self.status_text.append(f"已删除 {deleted_count} 个处理过的源文件")
+                event.accept()
+            elif msg_box.clickedButton() == no_btn:
+                # 不删除源文件，直接退出
+                event.accept()
+            else:
+                # 取消退出
+                event.ignore()
+        else:
+            # 没有处理过的源文件，直接退出
+            event.accept()
 
 
 if __name__ == "__main__":
